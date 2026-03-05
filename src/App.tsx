@@ -24,7 +24,14 @@ import {
   Activity,
   BarChart3,
   Globe,
-  Cpu
+  Cpu,
+  Copy,
+  Check,
+  Play,
+  Circle,
+  RefreshCw,
+  Download,
+  Settings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -87,28 +94,79 @@ const WorkflowStep = ({ phase, title, time, output, icon: Icon, color }: { phase
   </motion.div>
 );
 
-const CodeBlock = ({ code, language = "bash", title }: { code: string, language?: string, title?: string }) => (
-  <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-900 my-4">
-    {title && (
-      <div className="px-4 py-2 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center">
-        <span className="text-xs font-mono text-slate-400">{title}</span>
-        <div className="flex gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-500/20" />
-          <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20" />
-          <div className="w-2.5 h-2.5 rounded-full bg-green-500/20" />
-        </div>
-      </div>
-    )}
-    <pre className="p-4 overflow-x-auto">
-      <code className="text-sm font-mono text-blue-300 leading-relaxed">
-        {code}
-      </code>
-    </pre>
-  </div>
-);
+const CodeBlock = ({ code, language = "bash", title }: { code: string, language?: string, title?: string }) => {
+  const [copied, setCopied] = useState(false);
 
-const ThemeCard = ({ theme, bestFor, colors, mood }: { theme: string, bestFor: string, colors: string, mood: string }) => (
-  <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50">
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-900 my-4 group relative">
+      {title && (
+        <div className="px-4 py-2 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center">
+          <span className="text-xs font-mono text-slate-400">{title}</span>
+          <div className="flex gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500/20" />
+            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20" />
+            <div className="w-2.5 h-2.5 rounded-full bg-green-500/20" />
+          </div>
+        </div>
+      )}
+      <button 
+        onClick={copyToClipboard}
+        className="absolute top-3 right-3 p-2 rounded-lg bg-slate-800/50 text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all z-10"
+        title="Copy to clipboard"
+      >
+        {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+      </button>
+      <pre className="p-4 overflow-x-auto">
+        <code className="text-sm font-mono text-blue-300 leading-relaxed">
+          {code}
+        </code>
+      </pre>
+    </div>
+  );
+};
+
+const TerminalOutput = ({ logs, className }: { logs: string[], className?: string }) => {
+  const terminalRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  return (
+    <div className={cn("bg-black text-green-400 font-mono p-4 rounded-xl h-64 overflow-y-auto border border-slate-800 shadow-2xl", className)} ref={terminalRef}>
+      {logs.length === 0 ? (
+        <div className="text-slate-600 italic">Waiting for process start...</div>
+      ) : (
+        logs.map((line, i) => (
+          <div key={i} className="mb-1 flex gap-2">
+            <span className="text-blue-500 shrink-0">$</span>
+            <span className="break-all">{line}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+};
+
+const ThemeCard = ({ theme, id, bestFor, colors, mood, active, onSelect }: { theme: string, id: string, bestFor: string, colors: string, mood: string, active: boolean, onSelect: (id: string) => void }) => (
+  <motion.div 
+    whileHover={{ y: -4 }}
+    onClick={() => onSelect(id)}
+    className={cn(
+      "p-4 rounded-xl border transition-all cursor-pointer",
+      active 
+        ? "border-blue-500 bg-blue-50/50 dark:bg-blue-900/20 ring-2 ring-blue-500/20" 
+        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600"
+    )}
+  >
     <div className="flex justify-between items-center mb-2">
       <h4 className="font-bold text-slate-900 dark:text-white">{theme}</h4>
       <span className="text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500">{mood}</span>
@@ -121,8 +179,25 @@ const ThemeCard = ({ theme, bestFor, colors, mood }: { theme: string, bestFor: s
         </div>
       ))}
     </div>
-  </div>
+  </motion.div>
 );
+
+// --- Types ---
+type PhaseStatus = 'pending' | 'in-progress' | 'completed';
+
+interface ProjectState {
+  name: string;
+  theme: string;
+  phases: {
+    repo: PhaseStatus;
+    web: PhaseStatus;
+    android: PhaseStatus;
+    tests: PhaseStatus;
+    deploy: PhaseStatus;
+  };
+  androidApiLevel: number;
+  testSuiteSize: 'small' | 'medium' | 'large';
+}
 
 // --- Main Application ---
 
@@ -130,6 +205,117 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+  const [isBuilding, setIsBuilding] = useState(false);
+
+  // Project State with Persistence
+  const [project, setProject] = useState<ProjectState>(() => {
+    const saved = localStorage.getItem('platform-builder-project');
+    return saved ? JSON.parse(saved) : {
+      name: '',
+      theme: 'quantum-nexus',
+      phases: {
+        repo: 'pending',
+        web: 'pending',
+        android: 'pending',
+        tests: 'pending',
+        deploy: 'pending'
+      },
+      androidApiLevel: 24,
+      testSuiteSize: 'medium'
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('platform-builder-project', JSON.stringify(project));
+  }, [project]);
+
+  // Theme effect
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', project.theme);
+  }, [project.theme]);
+
+  const simulateCommand = async (cmd: string, output: string[], duration = 1500) => {
+    setTerminalLogs(prev => [...prev, cmd]);
+    await new Promise(r => setTimeout(r, 500));
+    for (const line of output) {
+      setTerminalLogs(prev => [...prev, line]);
+      await new Promise(r => setTimeout(r, duration / output.length));
+    }
+  };
+
+  const handleGetStarted = async () => {
+    if (isBuilding) return;
+    setIsBuilding(true);
+    setActiveTab('workflow');
+    
+    setProject(prev => ({
+      ...prev,
+      name: prev.name || 'My Awesome Platform',
+      phases: { ...prev.phases, repo: 'in-progress' }
+    }));
+
+    await simulateCommand('python scripts/init_github_repo.py "My Awesome Platform"', [
+      '✓ Initializing local git repository...',
+      '✓ Creating directory structure...',
+      '✓ Generating boilerplate code...',
+      '✓ Authenticating with GitHub CLI...',
+      '✓ Creating private repository on GitHub...',
+      '✓ Pushing initial commit...',
+      '■ Repository ready!'
+    ]);
+
+    setProject(prev => ({
+      ...prev,
+      phases: { ...prev.phases, repo: 'completed', web: 'in-progress' }
+    }));
+
+    await simulateCommand('npm run build:web', [
+      '✓ Compiling React components...',
+      '✓ Processing Tailwind CSS...',
+      '✓ Bundling assets with Vite...',
+      '✓ Generating interactive dashboard...',
+      '■ Web platform ready!'
+    ]);
+
+    setProject(prev => ({
+      ...prev,
+      phases: { ...prev.phases, web: 'completed' }
+    }));
+
+    setIsBuilding(false);
+  };
+
+  const resetProject = () => {
+    if (confirm('Are you sure you want to reset all progress?')) {
+      const initialState: ProjectState = {
+        name: '',
+        theme: 'quantum-nexus',
+        phases: {
+          repo: 'pending',
+          web: 'pending',
+          android: 'pending',
+          tests: 'pending',
+          deploy: 'pending'
+        },
+        androidApiLevel: 24,
+        testSuiteSize: 'medium'
+      };
+      setProject(initialState);
+      setTerminalLogs([]);
+      setActiveTab('overview');
+    }
+  };
+
+  const handleExport = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(project, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `${project.name || 'platform'}-config.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
 
   const navigation = [
     { id: 'overview', name: 'Overview', icon: Layout },
@@ -281,11 +467,18 @@ export default function App() {
                         Orchestrate website development, Android APK creation, and test suites into a cohesive workflow.
                       </p>
                       <div className="flex flex-wrap gap-4">
-                        <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition-all flex items-center gap-2">
-                          Get Started <ChevronRight className="w-4 h-4" />
+                        <button 
+                          onClick={handleGetStarted}
+                          disabled={isBuilding}
+                          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-bold transition-all flex items-center gap-2"
+                        >
+                          {isBuilding ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Get Started"} <ChevronRight className="w-4 h-4" />
                         </button>
-                        <button className="px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold transition-all">
-                          View Documentation
+                        <button 
+                          onClick={handleExport}
+                          className="px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold transition-all flex items-center gap-2"
+                        >
+                          <Download className="w-4 h-4" /> Export Config
                         </button>
                       </div>
                     </div>
@@ -344,47 +537,83 @@ export default function App() {
                     icon={Activity}
                   />
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <WorkflowStep 
-                      phase="Phase 1" 
-                      title="Repository Setup" 
-                      time="5–10 min" 
-                      output="GitHub repo + base structure ready" 
-                      icon={Github} 
-                      color="bg-blue-500"
-                    />
-                    <WorkflowStep 
-                      phase="Phase 2" 
-                      title="Web Platform Dev" 
-                      time="1–2 hrs" 
-                      output="React landing page + interactive dashboard" 
-                      icon={Globe} 
-                      color="bg-emerald-500"
-                    />
-                    <WorkflowStep 
-                      phase="Phase 3" 
-                      title="Android APK Dev" 
-                      time="1–2 hrs" 
-                      output="Native Android app with Material Design" 
-                      icon={Smartphone} 
-                      color="bg-purple-500"
-                    />
-                    <WorkflowStep 
-                      phase="Phase 4" 
-                      title="Test Suite Generation" 
-                      time="30 min" 
-                      output="618+ unit, integration & perf tests" 
-                      icon={ShieldCheck} 
-                      color="bg-orange-500"
-                    />
-                    <WorkflowStep 
-                      phase="Phase 5" 
-                      title="Integration & Deploy" 
-                      time="20 min" 
-                      output="Live platform published on GitHub" 
-                      icon={Zap} 
-                      color="bg-red-500"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4">
+                        <div className={cn(
+                          "p-6 rounded-2xl border transition-all",
+                          project.phases.repo === 'completed' ? "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                        )}>
+                          <div className="flex items-center gap-3 mb-4">
+                            {project.phases.repo === 'completed' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : project.phases.repo === 'in-progress' ? <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" /> : <Circle className="w-5 h-5 text-slate-300" />}
+                            <h3 className="font-bold">1. Repository Setup</h3>
+                          </div>
+                          <p className="text-sm text-slate-500">GitHub repo initialized with base structure.</p>
+                        </div>
+
+                        <div className={cn(
+                          "p-6 rounded-2xl border transition-all",
+                          project.phases.web === 'completed' ? "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                        )}>
+                          <div className="flex items-center gap-3 mb-4">
+                            {project.phases.web === 'completed' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : project.phases.web === 'in-progress' ? <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" /> : <Circle className="w-5 h-5 text-slate-300" />}
+                            <h3 className="font-bold">2. Web Platform</h3>
+                          </div>
+                          <p className="text-sm text-slate-500">React dashboard and landing page generated.</p>
+                        </div>
+
+                        <div className={cn(
+                          "p-6 rounded-2xl border transition-all",
+                          project.phases.android === 'completed' ? "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800" : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                        )}>
+                          <div className="flex items-center gap-3 mb-4">
+                            {project.phases.android === 'completed' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : project.phases.android === 'in-progress' ? <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" /> : <Circle className="w-5 h-5 text-slate-300" />}
+                            <h3 className="font-bold">3. Android APK</h3>
+                          </div>
+                          <p className="text-sm text-slate-500">Native Android app compiled and ready.</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-bold flex items-center gap-2">
+                          <Terminal className="w-5 h-5 text-blue-500" />
+                          Build Terminal
+                        </h3>
+                        <button 
+                          onClick={() => setTerminalLogs([])}
+                          className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                        >
+                          Clear Logs
+                        </button>
+                      </div>
+                      <TerminalOutput logs={terminalLogs} />
+                      
+                      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <h4 className="font-bold mb-4 flex items-center gap-2">
+                          <Settings className="w-4 h-4 text-slate-400" />
+                          Project Controls
+                        </h4>
+                        <div className="space-y-4">
+                          <button 
+                            onClick={handleGetStarted}
+                            disabled={isBuilding}
+                            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl font-bold text-white transition-all flex items-center justify-center gap-2"
+                          >
+                            {isBuilding ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                            Resume Build
+                          </button>
+                          <button 
+                            onClick={resetProject}
+                            className="w-full py-3 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            Reset Project
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -462,11 +691,51 @@ export default function App() {
                     icon={Palette}
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <ThemeCard theme="Quantum Nexus" bestFor="Tech / AI" colors="Navy, Electric Blue, Green" mood="Futuristic" />
-                    <ThemeCard theme="Minimalist" bestFor="SaaS" colors="White, Grays, Accent" mood="Clean" />
-                    <ThemeCard theme="Bold" bestFor="Creative" colors="Vibrant Gradients" mood="Dynamic" />
-                    <ThemeCard theme="Professional" bestFor="Enterprise" colors="Blues, Grays" mood="Trustworthy" />
-                    <ThemeCard theme="Neon" bestFor="Gaming / Web3" colors="Black, Neon Accents" mood="Edgy" />
+                    <ThemeCard 
+                      theme="Quantum Nexus" 
+                      id="quantum-nexus"
+                      bestFor="Tech / AI" 
+                      colors="Navy, Electric Blue, Green" 
+                      mood="Futuristic" 
+                      active={project.theme === 'quantum-nexus'}
+                      onSelect={(id) => setProject(prev => ({ ...prev, theme: id }))}
+                    />
+                    <ThemeCard 
+                      theme="Minimalist" 
+                      id="minimalist"
+                      bestFor="SaaS" 
+                      colors="White, Grays, Accent" 
+                      mood="Clean" 
+                      active={project.theme === 'minimalist'}
+                      onSelect={(id) => setProject(prev => ({ ...prev, theme: id }))}
+                    />
+                    <ThemeCard 
+                      theme="Bold" 
+                      id="bold"
+                      bestFor="Creative" 
+                      colors="Vibrant Gradients" 
+                      mood="Dynamic" 
+                      active={project.theme === 'bold'}
+                      onSelect={(id) => setProject(prev => ({ ...prev, theme: id }))}
+                    />
+                    <ThemeCard 
+                      theme="Professional" 
+                      id="professional"
+                      bestFor="Enterprise" 
+                      colors="Blues, Grays" 
+                      mood="Trustworthy" 
+                      active={project.theme === 'professional'}
+                      onSelect={(id) => setProject(prev => ({ ...prev, theme: id }))}
+                    />
+                    <ThemeCard 
+                      theme="Neon" 
+                      id="neon"
+                      bestFor="Gaming / Web3" 
+                      colors="Black, Neon Accents" 
+                      mood="Edgy" 
+                      active={project.theme === 'neon'}
+                      onSelect={(id) => setProject(prev => ({ ...prev, theme: id }))}
+                    />
                   </div>
 
                   <div className="mt-12 p-8 rounded-2xl bg-blue-600 text-white">
