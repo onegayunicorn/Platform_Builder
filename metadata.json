@@ -1,0 +1,5 @@
+{
+  "name": "Platform Builder Skill",
+  "description": "A full-stack platform automation tool for building production-ready websites, Android apps, and test suites.",
+  "requestFramePermissions": []
+}
